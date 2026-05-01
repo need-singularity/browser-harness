@@ -2,7 +2,7 @@
 name = "browser-harness"
 version = "0.1.0"
 description = "Playwright-based browser automation harness for need-singularity fleet. Fresh-context factory (mandate 1-6) + probe + selftest. v0.1.0 = install land + structural selftest; oauth-login = forward-spec stub."
-entry = "bin/harness"
+entry = "bin/browser-harness"
 license = "MIT"
 
 [package.dependencies]

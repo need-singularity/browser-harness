@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "description": "Playwright browser automation harness — fresh-context factory + probe + selftest",
   "private": true,
-  "bin": { "harness": "bin/harness" },
+  "bin": { "browser-harness": "bin/browser-harness", "harness": "bin/harness" },
   "scripts": {
     "selftest": "node tests/selftest.cjs"
   },

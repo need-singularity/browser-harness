@@ -1,0 +1,46 @@
+#!/bin/bash
+# browser-harness — CLI entry; delegates to lib/harness.cjs (Node).
+# Self-bootstraps node_modules on first run AND after `hx update` (which
+# pulls new code but does NOT re-run install.sh).
+set -e
+
+# Resolve the script's real directory, even when invoked via symlink shim
+# (~/.hx/bin/browser-harness -> ~/.hx/packages/browser-harness/bin/browser-harness).
+_resolve_self() {
+  local p="$1"
+  while [ -L "$p" ]; do
+    local d
+    d="$(cd "$(dirname "$p")" && pwd)"
+    p="$(readlink "$p")"
+    case "$p" in /*) ;; *) p="$d/$p" ;; esac
+  done
+  cd "$(dirname "$p")" && pwd
+}
+SELF_DIR="$(_resolve_self "$0")"
+HARNESS_ROOT="$(cd "$SELF_DIR/.." && pwd)"
+
+NODE="${NODE:-$(command -v node 2>/dev/null || true)}"
+if [ -z "$NODE" ] || [ ! -x "$NODE" ]; then
+  echo "FATAL: node not found in PATH. Install Node >=18 or set NODE=<path>." >&2
+  exit 1
+fi
+
+# Self-bootstrap: missing playwright-core means deps not installed (or hx
+# updated us past a dep change). Auto-heal once, then continue.
+if [ ! -d "$HARNESS_ROOT/node_modules/playwright-core" ]; then
+  if [ "${BROWSER_HARNESS_NO_BOOTSTRAP:-}" = "1" ]; then
+    echo "FATAL: node_modules missing and BROWSER_HARNESS_NO_BOOTSTRAP=1." >&2
+    exit 1
+  fi
+  if ! command -v npm >/dev/null 2>&1; then
+    echo "FATAL: npm not found; cannot bootstrap node_modules in $HARNESS_ROOT" >&2
+    exit 1
+  fi
+  echo "browser-harness: bootstrapping node_modules (one-time, post-install/update)..." >&2
+  (cd "$HARNESS_ROOT" && npm install --omit=dev --no-audit --no-fund --silent --no-progress >/dev/null) || {
+    echo "FATAL: npm install failed in $HARNESS_ROOT" >&2
+    exit 1
+  }
+fi
+
+exec "$NODE" "$HARNESS_ROOT/lib/harness.cjs" "$@"

@@ -1,0 +1,10 @@
+#!/bin/bash
+# browser-harness — CLI entry; delegates to lib/harness.cjs (Node)
+set -e
+HARNESS_ROOT="$(cd "$(dirname "$(readlink -f "$0" 2>/dev/null || echo "$0")")/.." && pwd)"
+NODE="${NODE:-$(command -v node 2>/dev/null || true)}"
+if [ -z "$NODE" ] || [ ! -x "$NODE" ]; then
+  echo "FATAL: node not found in PATH. install Node >=18 or set NODE=<path>." >&2
+  exit 1
+fi
+exec "$NODE" "$HARNESS_ROOT/lib/harness.cjs" "$@"

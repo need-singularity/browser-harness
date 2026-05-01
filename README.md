@@ -30,13 +30,14 @@ browser-harness <subcommand> [options]
 | Subcommand | Behavior | Exit | Sentinel (stdout) |
 |---|---|---|---|
 | `probe` | check installability + factory loadable | 0 ready / 1 absent | `ready` or `absent: <why>` |
-| `selftest` | F1-F5 structural fixtures (no live browser) | 0 PASS / 5 FAIL | `__BROWSER_HARNESS_SELFTEST__ PASS\|FAIL fails=<N>` |
-| `oauth-login --slot N [--headless]` | OAuth flow | 50 (v0.1.x stub) / 0 (v0.2+) | `oauth-login: NOT IMPLEMENTED in v<X>` (current) |
+| `selftest` | F1-F6 structural fixtures (no live browser) | 0 PASS / 5 FAIL | `__BROWSER_HARNESS_SELFTEST__ PASS\|FAIL fails=<N>` |
+| `oauth-login --slot N [--headless]` | OAuth flow → slot-isolated storageState (see `docs/oauth-login.md`) | 0 / 1 / 4 / 51 / 52 | `oauth-login: …` (per-result) |
 | `version` | print version | 0 | `<X.Y.Z>` |
 | `help` | usage | 0 | — |
 
-Exit code conventions: `0` PASS, `1` absent/probe-fail, `2` fatal, `4` usage,
-`5` selftest fail, `50` not-implemented (forward-spec).
+Exit code conventions: `0` PASS, `1` absent/probe-fail/oauth-fail, `2` fatal,
+`4` usage, `5` selftest fail, `51` oauth manual-required-but-headless,
+`52` oauth idempotent-already-logged-in.
 
 ## Env
 
@@ -47,6 +48,10 @@ Exit code conventions: `0` PASS, `1` absent/probe-fail, `2` fatal, `4` usage,
 | `BROWSER_HARNESS_STATE` | `~/.browser-harness/state` | per-slot storage state dir |
 | `BROWSER_HARNESS_HOME` | (unset) | override resolver root for hexa wrappers |
 | `BROWSER_HARNESS_NO_BOOTSTRAP` | `0` | `1` disables auto `npm install` (CI hermetic mode; fail loud if deps missing) |
+| `BROWSER_HARNESS_OAUTH_START_URL` | (required for `oauth-login`) | the OAuth authorize URL to navigate to |
+| `BROWSER_HARNESS_OAUTH_SUCCESS_PATTERN` | `^https?://platform\.claude\.com/oauth/code/callback` | regex matched against `page.url()` to declare success |
+| `BROWSER_HARNESS_OAUTH_TIMEOUT_MS` | `300000` | ceiling on the user-click phase (oauth-login) |
+| `BROWSER_HARNESS_OAUTH_ENGINE` | `chromium` | Playwright engine for the headed oauth-login window |
 | `NODE` | `$(command -v node)` | override Node binary path |
 
 ## Update tracking
@@ -120,7 +125,7 @@ Wrapper sentinel: `__BROWSER_HARNESS_PROBE__ status=<present|absent> path=<resol
 
 ## Selftest contract
 
-`browser-harness selftest` runs without launching a browser. F1-F5:
+`browser-harness selftest` runs without launching a browser. F1-F6:
 
 | ID | Asserts |
 |---|---|
@@ -129,6 +134,7 @@ Wrapper sentinel: `__BROWSER_HARNESS_PROBE__ status=<present|absent> path=<resol
 | F3 | `dispose(null)` and `dispose(undefined)` idempotent (no throw) |
 | F4 | `parseArgs` flag-with-value vs flag-only roundtrip |
 | F5 | `probe` subprocess returns `ready\n` exit 0 OR `absent: …\n` exit 1 |
+| F6 | `lib/oauth.cjs` exports `runOauthLogin`, `isStateValid`, `safeUrlPrefix`; `runOauthLogin({})` returns 4 (slot required); chmod 0600 capable on POSIX |
 
 Exit 0 on `fails=0`, exit 5 otherwise. Final line is the sentinel.
 
@@ -144,7 +150,7 @@ echo "$out" | grep -q "__BROWSER_HARNESS_SELFTEST__ PASS fails=0" || { echo "$ou
 - `v0.1.0` — initial; `bin/harness` entry
 - `v0.1.1` — entry rename `bin/browser-harness` (matches hx auto-detect convention `bin/<pkg-name>`); `bin/harness` kept as symlink for back-compat; self-bootstrap on existence check
 - `v0.1.2` — dep-drift detection (lockfile mtime); shipped `wrappers/browser_harness.hexa`
-- `v0.2.x` (forward-spec) — real OAuth flow (`oauth-login` exit 0 path)
+- `v0.2.0` — real `oauth-login` (`lib/oauth.cjs`); slot-isolated storageState persistence (mode 0600); exit codes 0/1/4/51/52 (50 removed); `BROWSER_HARNESS_OAUTH_*` env surface; F6 added to selftest. See `docs/oauth-login.md`.
 
 ## Layout
 
@@ -158,9 +164,12 @@ browser-harness/
 │   └── harness                    symlink → browser-harness (legacy)
 ├── lib/
 │   ├── harness.cjs                subcommand dispatcher
-│   └── factory.cjs                fresh-context factory (M1-M6)
+│   ├── factory.cjs                fresh-context factory (M1-M6)
+│   └── oauth.cjs                  real oauth-login flow (v0.2.0)
+├── docs/
+│   └── oauth-login.md             oauth-login design + exit codes + env + security
 ├── tests/
-│   └── selftest.cjs               F1-F5
+│   └── selftest.cjs               F1-F6
 └── wrappers/
     └── browser_harness.hexa       optional hexa-side wrapper
 ```

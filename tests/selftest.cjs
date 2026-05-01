@@ -1,10 +1,12 @@
-// F1-F5 structural fixtures — no live browser spawn.
+// F1-F6 structural fixtures — no live browser spawn.
 //
 // F1: factory module loads, exports expected API
 // F2: slotStatePath() returns null for empty slot, path for valid slot
 // F3: dispose(null) and dispose(undefined) do not throw (idempotent)
 // F4: parseArgs roundtrip — flags with values vs flag-only
 // F5: probe contract: "ready" string or "absent: <why>" string, both stdout
+// F6: oauth module loads, exports runOauthLogin(opts), --slot is required
+//     (exit 4), and persisted state files would be 0600 (chmod path exists)
 
 const path = require('path');
 const { spawnSync } = require('child_process');
@@ -81,6 +83,52 @@ async function runSelftest() {
       pass('F5', `probe → "${out}" exit=${res.status}`);
     }
   } catch (e) { fail('F5', e.message); fails++; }
+
+  // F6 — oauth module structural contract (no live browser launch)
+  try {
+    const oauth = require('../lib/oauth.cjs');
+    const oauthMissing = ['runOauthLogin', 'isStateValid', 'safeUrlPrefix']
+      .filter(k => typeof oauth[k] !== 'function');
+    if (oauthMissing.length) {
+      fail('F6', `oauth module missing exports: ${oauthMissing.join(',')}`);
+      fails++;
+    } else {
+      // contract: --slot missing → exit 4
+      const codeNoSlot = await oauth.runOauthLogin({});
+      if (codeNoSlot !== 4) {
+        fail('F6', `runOauthLogin({}) → ${codeNoSlot}, expected 4`);
+        fails++;
+      } else {
+        // contract: persisted state files chmod 0600 — verify the chmod
+        // capability is present on this platform by chmodding a tmpfile
+        // and reading the mode back. (POSIX only; on win32 this is a
+        // permissive no-op so we skip the strict check.)
+        let chmodOk = true;
+        if (process.platform !== 'win32') {
+          const fs = require('fs');
+          const os = require('os');
+          const tmp = require('path').join(os.tmpdir(), `bh-selftest-f6-${process.pid}.tmp`);
+          try {
+            fs.writeFileSync(tmp, '{}');
+            fs.chmodSync(tmp, 0o600);
+            const st = fs.statSync(tmp);
+            const mode = st.mode & 0o777;
+            if (mode !== 0o600) {
+              chmodOk = false;
+              fail('F6', `chmod 0600 verify failed: got ${mode.toString(8)}`);
+              fails++;
+            }
+            try { fs.unlinkSync(tmp); } catch (_) {}
+          } catch (e) {
+            chmodOk = false;
+            fail('F6', `chmod probe failed: ${e.message}`);
+            fails++;
+          }
+        }
+        if (chmodOk) pass('F6', 'oauth exports + --slot required + chmod 0600 capable');
+      }
+    }
+  } catch (e) { fail('F6', `oauth require failed: ${e.message}`); fails++; }
 
   if (fails === 0) {
     process.stdout.write('__BROWSER_HARNESS_SELFTEST__ PASS fails=0\n');

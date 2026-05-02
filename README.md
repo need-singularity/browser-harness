@@ -30,7 +30,7 @@ browser-harness <subcommand> [options]
 | Subcommand | `--target=mac` (default) | `--target=ubu1\|ubu2` | `--target=fleet` | Exit | Sentinel (stdout) |
 |---|---|---|---|---|---|
 | `probe` | check installability + factory loadable | ssh + remote node check | fan out across fleet hosts | 0 ready / 1 absent | `ready` (mac) or `ready (remote=<host> node=<v> playwright=<v>)` (remote) or `absent: <why>` |
-| `selftest` | F1-F8 structural fixtures (no live browser, no SSH) | ssh + remote payload selftest (F1/F2/F3/F6 subset) | fan out | 0 PASS / 5 FAIL | `__BROWSER_HARNESS_SELFTEST__ PASS\|FAIL fails=<N>` |
+| `selftest` | F1-F9 structural fixtures (no live browser, no SSH) | ssh + remote payload selftest (F1/F2/F3/F6 + F5-remote/F7-remote/F8-remote) | fan out | 0 PASS / 5 FAIL | `__BROWSER_HARNESS_SELFTEST__ PASS\|FAIL fails=<N>` |
 | `oauth-login --slot N [--headless]` | OAuth flow → slot-isolated storageState (see `docs/oauth-login.md`) | scp state + remote launch + scp back (mode 0600) | NA — refused (slot state can only live on one host) | 0 / 1 / 4 / 51 / 52 | `oauth-login: …` (per-result) |
 | `version` | print version | ssh + remote print | NA — prints Mac version | 0 | `<X.Y.Z>` |
 | `help` | usage | — | — | 0 | — |
@@ -126,7 +126,7 @@ Wrapper sentinel: `__BROWSER_HARNESS_PROBE__ status=<present|absent> path=<resol
 
 ## Selftest contract
 
-`browser-harness selftest` runs without launching a browser AND without making any SSH call. F1-F8:
+`browser-harness selftest` runs without launching a browser AND without making any SSH call. F1-F9:
 
 | ID | Asserts |
 |---|---|
@@ -138,8 +138,11 @@ Wrapper sentinel: `__BROWSER_HARNESS_PROBE__ status=<present|absent> path=<resol
 | F6 | `lib/oauth.cjs` exports `runOauthLogin`, `isStateValid`, `safeUrlPrefix`; `runOauthLogin({})` returns 4 (slot required); chmod 0600 capable on POSIX |
 | F7 | `lib/remote.cjs` exports `runRemote`, `runOauthLoginRemote`, `runFleet`, `preflight`, `buildPayload`, `fleetHosts`; `buildPayload(...)` returns a self-contained Node script (`'use strict';` header + inlined `factory.cjs` + `oauth.cjs`) |
 | F8 | `--target` arg parsed correctly: default → `mac`; `ubu1`/`ubu2`/`fleet` → `isRemoteTarget()===true`; bare `--target` (no value) falls back to `mac` |
+| F9 | `tests/selftest_remote.cjs` ships, `lib/remote.cjs` exports `runRemoteSelftest`, AND `buildPayload({subcmd:'selftest'})` inlines the fixture (and only that subcmd does — `probe`/`oauth-login`/`version` payloads stay small) |
 
 Exit 0 on `fails=0`, exit 5 otherwise. Final line is the sentinel.
+
+Remote-side selftest (`browser-harness selftest --target ubu*`) runs symmetric coverage in-process on the remote: F1/F2/F3/F6 (same as bundled today) PLUS F5-remote (in-process `runOauthLogin({}) → 4`, no subprocess needed since `bin/browser-harness` is not shipped), F7-remote (factory + oauth co-loadable in same process — the canonical use case), F8-remote (SLOT_STATE dir creates with mode 0700 if absent). Same `__BROWSER_HARNESS_SELFTEST__ PASS fails=N (remote)` sentinel; lines prefixed with `(remote)`.
 
 CI integration (any orchestrator):
 
@@ -156,6 +159,7 @@ echo "$out" | grep -q "__BROWSER_HARNESS_SELFTEST__ PASS fails=0" || { echo "$ou
 - `v0.2.0` — real `oauth-login` (`lib/oauth.cjs`); slot-isolated storageState persistence (mode 0600); exit codes 0/1/4/51/52 (50 removed); `BROWSER_HARNESS_OAUTH_*` env surface; F6 added to selftest. See `docs/oauth-login.md`.
 - `v0.2.1` — bootstrap switched from `npm install` to `npm ci` (with fallback to `npm install` only when `package-lock.json` absent). Eliminates the `hx update browser-harness` friction where the post-install lockfile regeneration left `package-lock.json` locally-modified, which then made `git pull --ff-only` refuse to apply the update. `npm ci` reads but never writes the lockfile, so the working tree stays clean across invocations.
 - `v0.3.0` — `lib/remote.cjs` Mac→ubu1/ubu2/fleet SSH-pipe transport; `--target {mac|ubu1|ubu2|fleet}` flag added to `probe`, `selftest`, `version`, `oauth-login`. Self-contained Node payload (factory.cjs + oauth.cjs inlined as base64) piped to `ssh <host> 'node -'`; preflight asserts node + playwright on the remote (npx cache discovered automatically; falls back to one-shot tmpdir install). `oauth-login --target ubu*` SCPs slot-N.json over before launch and pulls the updated state back on success/idempotent (mode 0600); failure leaves Mac state untouched. `--target fleet` fans out across `BROWSER_HARNESS_FLEET_HOSTS` (default `ubu2`); `oauth-login --target fleet` is refused. F7 (remote module) + F8 (target parsing) added to selftest. Bash exit-50 stub message superseded.
+- `v0.3.1` — symmetric remote selftest + exit-52 SCP-skip via content hash. (1) `tests/selftest_remote.cjs` ships and is inlined into the SSH payload by `lib/remote.cjs::buildPayload()` when `subcmd === 'selftest'`. Remote coverage now matches the local F1-F8 surface as F1/F2/F3/F6 (bundled today) + **F5-remote** (in-process `runOauthLogin({}) → 4` — no subprocess needed since `bin/browser-harness` isn't shipped) + **F7-remote** (factory + oauth co-loadable in the same process — the canonical use case) + **F8-remote** (SLOT_STATE dir creates with mode 0700 if absent). F4 stays CLI-side (parseArgs is a Mac concern); F7/F8 don't apply to the remote payload itself (the remote never inspects `--target`). Same `__BROWSER_HARNESS_SELFTEST__ PASS fails=N (remote)` sentinel; output lines prefixed with `(remote)`. F9 added to local selftest as a structural guard (fixture exists + `runRemoteSelftest` exported + payload references it for the selftest subcmd only). (2) `runOauthLoginRemote` now skips the SCP-back when the remote returned exit 52 AND the local + remote slot files are byte-identical (sha256 compared via `ssh <host> shasum -a 256 <path>`). Logs `remote.cjs: slot-<N> state byte-identical, skipped SCP-back`. When local has no prior state but remote returned 52, still SCPs back (preserve a pre-seeded remote). Exit 0 always SCPs back.
 
 ## Layout
 
@@ -175,7 +179,8 @@ browser-harness/
 ├── docs/
 │   └── oauth-login.md             oauth-login design + exit codes + env + security
 ├── tests/
-│   └── selftest.cjs               F1-F8
+│   ├── selftest.cjs               F1-F9 (Mac-side; default `--target mac`)
+│   └── selftest_remote.cjs        F1/F2/F3/F6 + F5-remote/F7-remote/F8-remote (inlined into SSH payload)
 └── wrappers/
     └── browser_harness.hexa       optional hexa-side wrapper
 ```

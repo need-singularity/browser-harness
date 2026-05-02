@@ -1,4 +1,4 @@
-// F1-F8 structural fixtures — no live browser spawn, no SSH.
+// F1-F9 structural fixtures — no live browser spawn, no SSH.
 //
 // F1: factory module loads, exports expected API
 // F2: slotStatePath() returns null for empty slot, path for valid slot
@@ -12,6 +12,10 @@
 //     self-contained Node script (string starts with "'use strict';")
 // F8: --target arg parsing — targetOf() returns 'mac' as default, ubu1/ubu2/
 //     fleet trigger isRemoteTarget() === true; bare --target (no value) → 'mac'
+// F9: tests/selftest_remote.cjs ships, lib/remote.cjs exports
+//     runRemoteSelftest, AND remote.buildPayload({subcmd:'selftest'})
+//     references the inlined fixture (selftest_remote.cjs string present
+//     in the payload). Symmetric-coverage structural guard.
 
 const path = require('path');
 const { spawnSync } = require('child_process');
@@ -180,6 +184,47 @@ async function runSelftest() {
     else if (targetOf(parseArgs(['probe', '--target'])) !== 'mac') { fail('F8', `bare --target → ${targetOf(parseArgs(['probe', '--target']))}`); fails++; }
     else pass('F8', `--target parsing (mac default; ubu1/ubu2/fleet → remote)`);
   } catch (e) { fail('F8', `harness module load failed: ${e.message}`); fails++; }
+
+  // F9 — symmetric-remote-selftest structural guard:
+  //   (a) tests/selftest_remote.cjs exists on disk
+  //   (b) lib/remote.cjs exports runRemoteSelftest as a function
+  //   (c) remote.buildPayload({subcmd:'selftest'}) inlines selftest_remote.cjs
+  //       (so the remote process can actually load it from <libDir>)
+  try {
+    const fs9 = require('fs');
+    const path9 = require('path');
+    const remoteFixture = path9.join(__dirname, 'selftest_remote.cjs');
+    if (!fs9.existsSync(remoteFixture)) {
+      fail('F9', `tests/selftest_remote.cjs missing at ${remoteFixture}`); fails++;
+    } else {
+      const remote = require('../lib/remote.cjs');
+      if (typeof remote.runRemoteSelftest !== 'function') {
+        fail('F9', `lib/remote.cjs does not export runRemoteSelftest`); fails++;
+      } else {
+        const selftestPayload = remote.buildPayload({ subcmd: 'selftest', args: {}, opts: {} });
+        if (!selftestPayload.includes('selftest_remote.cjs')) {
+          fail('F9', `buildPayload({subcmd:'selftest'}) does not reference selftest_remote.cjs`); fails++;
+        } else if (!selftestPayload.includes('runRemoteSelftest')) {
+          fail('F9', `buildPayload({subcmd:'selftest'}) does not invoke runRemoteSelftest`); fails++;
+        } else {
+          // Sanity: non-selftest payload should NOT inline the fixture body
+          // (keeps probe/oauth/version payloads small). The dispatcher
+          // always references the literal string "selftest_remote.cjs"
+          // inside the payload template (case 'selftest' branch), so we
+          // detect leak by comparing payload sizes — selftest payload must
+          // be measurably larger than probe payload because the fixture
+          // is base64-inlined only for that subcmd.
+          const probePayload = remote.buildPayload({ subcmd: 'probe', args: {}, opts: {} });
+          const sizeDelta = selftestPayload.length - probePayload.length;
+          if (sizeDelta < 1000) {
+            fail('F9', `selftest payload not measurably larger than probe (delta=${sizeDelta} bytes; expected >=1000)`); fails++;
+          } else {
+            pass('F9', `selftest_remote.cjs shipped + inlined for selftest subcmd only (payload delta=${sizeDelta} bytes)`);
+          }
+        }
+      }
+    }
+  } catch (e) { fail('F9', `structural check threw: ${e.message}`); fails++; }
 
   if (fails === 0) {
     process.stdout.write('__BROWSER_HARNESS_SELFTEST__ PASS fails=0\n');

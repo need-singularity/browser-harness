@@ -1,0 +1,14 @@
+# raw 270 + raw 271 baseline — grandfather list (browser-harness)
+# Created 2026-05-03. Single-purpose wrapper repo, raw 168 minimum-viable exempt.
+# Format: one path per line, repo-relative, # comments allowed.
+#
+# 2026-05-03 land (Option A baseline grandfather — BG-BH cycle):
+#   Repo top-level README.md serves AI-native intent (README.ai.md literal
+#   basename absent by design). raw 271 PARTIAL → grandfather entry below.
+#   Lint exempt rationale: single-purpose package, no core/+module split,
+#   raw 270 NOT_APPLY (raw 168 minimum-viable).
+#
+# After 2026-06-01: if hive promotes warn → block, this baseline preserves
+# this single legitimate exemption. New module dirs added under modules/
+# would still require README.ai.md per raw 271 universal mandate.
+.

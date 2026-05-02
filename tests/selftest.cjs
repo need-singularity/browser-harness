@@ -1,4 +1,4 @@
-// F1-F6 structural fixtures — no live browser spawn.
+// F1-F8 structural fixtures — no live browser spawn, no SSH.
 //
 // F1: factory module loads, exports expected API
 // F2: slotStatePath() returns null for empty slot, path for valid slot
@@ -7,6 +7,11 @@
 // F5: probe contract: "ready" string or "absent: <why>" string, both stdout
 // F6: oauth module loads, exports runOauthLogin(opts), --slot is required
 //     (exit 4), and persisted state files would be 0600 (chmod path exists)
+// F7: remote module loads, exports runRemote/runOauthLoginRemote/runFleet/
+//     preflight/buildPayload/fleetHosts; buildPayload returns a non-empty
+//     self-contained Node script (string starts with "'use strict';")
+// F8: --target arg parsing — targetOf() returns 'mac' as default, ubu1/ubu2/
+//     fleet trigger isRemoteTarget() === true; bare --target (no value) → 'mac'
 
 const path = require('path');
 const { spawnSync } = require('child_process');
@@ -129,6 +134,52 @@ async function runSelftest() {
       }
     }
   } catch (e) { fail('F6', `oauth require failed: ${e.message}`); fails++; }
+
+  // F7 — remote.cjs structural contract (no SSH attempted)
+  try {
+    const remote = require('../lib/remote.cjs');
+    const required = ['runRemote', 'runOauthLoginRemote', 'runFleet', 'preflight', 'buildPayload', 'fleetHosts'];
+    const missing = required.filter(k => typeof remote[k] !== 'function');
+    if (missing.length) {
+      fail('F7', `remote module missing exports: ${missing.join(',')}`);
+      fails++;
+    } else {
+      // buildPayload should return a non-empty self-contained Node script
+      const payload = remote.buildPayload({ subcmd: 'probe', args: {}, opts: {} });
+      if (typeof payload !== 'string' || payload.length < 100) {
+        fail('F7', `buildPayload returned suspect output: type=${typeof payload} len=${(payload || '').length}`);
+        fails++;
+      } else if (!payload.includes("'use strict'")) {
+        fail('F7', `buildPayload output missing 'use strict' header`);
+        fails++;
+      } else if (!payload.includes('factory.cjs') || !payload.includes('oauth.cjs')) {
+        fail('F7', `buildPayload output missing inlined module names`);
+        fails++;
+      } else {
+        pass('F7', `remote exports complete + buildPayload self-contained (${payload.length} bytes)`);
+      }
+    }
+  } catch (e) { fail('F7', `remote require failed: ${e.message}`); fails++; }
+
+  // F8 — --target arg parsing
+  try {
+    const harness = require('../lib/harness.cjs');
+    const { parseArgs, targetOf, isRemoteTarget } = harness;
+    // Default → mac
+    const a1 = parseArgs(['probe']);
+    if (targetOf(a1) !== 'mac') { fail('F8', `default target: ${targetOf(a1)}`); fails++; }
+    // --target mac → mac (explicit)
+    else if (targetOf(parseArgs(['probe', '--target', 'mac'])) !== 'mac') { fail('F8', `--target mac`); fails++; }
+    // --target ubu1 → ubu1, isRemoteTarget true
+    else if (targetOf(parseArgs(['probe', '--target', 'ubu1'])) !== 'ubu1') { fail('F8', `--target ubu1 parse`); fails++; }
+    else if (!isRemoteTarget('ubu1')) { fail('F8', `isRemoteTarget(ubu1) false`); fails++; }
+    else if (!isRemoteTarget('ubu2')) { fail('F8', `isRemoteTarget(ubu2) false`); fails++; }
+    else if (!isRemoteTarget('fleet')) { fail('F8', `isRemoteTarget(fleet) false`); fails++; }
+    else if (isRemoteTarget('mac')) { fail('F8', `isRemoteTarget(mac) true`); fails++; }
+    // bare --target (no value) → 'mac' fallback (per targetOf semantics)
+    else if (targetOf(parseArgs(['probe', '--target'])) !== 'mac') { fail('F8', `bare --target → ${targetOf(parseArgs(['probe', '--target']))}`); fails++; }
+    else pass('F8', `--target parsing (mac default; ubu1/ubu2/fleet → remote)`);
+  } catch (e) { fail('F8', `harness module load failed: ${e.message}`); fails++; }
 
   if (fails === 0) {
     process.stdout.write('__BROWSER_HARNESS_SELFTEST__ PASS fails=0\n');

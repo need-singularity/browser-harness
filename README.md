@@ -27,13 +27,13 @@ manually checking out inside `~/.hx/packages/browser-harness/` if needed.
 browser-harness <subcommand> [options]
 ```
 
-| Subcommand | Behavior | Exit | Sentinel (stdout) |
-|---|---|---|---|
-| `probe` | check installability + factory loadable | 0 ready / 1 absent | `ready` or `absent: <why>` |
-| `selftest` | F1-F6 structural fixtures (no live browser) | 0 PASS / 5 FAIL | `__BROWSER_HARNESS_SELFTEST__ PASS\|FAIL fails=<N>` |
-| `oauth-login --slot N [--headless]` | OAuth flow → slot-isolated storageState (see `docs/oauth-login.md`) | 0 / 1 / 4 / 51 / 52 | `oauth-login: …` (per-result) |
-| `version` | print version | 0 | `<X.Y.Z>` |
-| `help` | usage | 0 | — |
+| Subcommand | `--target=mac` (default) | `--target=ubu1\|ubu2` | `--target=fleet` | Exit | Sentinel (stdout) |
+|---|---|---|---|---|---|
+| `probe` | check installability + factory loadable | ssh + remote node check | fan out across fleet hosts | 0 ready / 1 absent | `ready` (mac) or `ready (remote=<host> node=<v> playwright=<v>)` (remote) or `absent: <why>` |
+| `selftest` | F1-F8 structural fixtures (no live browser, no SSH) | ssh + remote payload selftest (F1/F2/F3/F6 subset) | fan out | 0 PASS / 5 FAIL | `__BROWSER_HARNESS_SELFTEST__ PASS\|FAIL fails=<N>` |
+| `oauth-login --slot N [--headless]` | OAuth flow → slot-isolated storageState (see `docs/oauth-login.md`) | scp state + remote launch + scp back (mode 0600) | NA — refused (slot state can only live on one host) | 0 / 1 / 4 / 51 / 52 | `oauth-login: …` (per-result) |
+| `version` | print version | ssh + remote print | NA — prints Mac version | 0 | `<X.Y.Z>` |
+| `help` | usage | — | — | 0 | — |
 
 Exit code conventions: `0` PASS, `1` absent/probe-fail/oauth-fail, `2` fatal,
 `4` usage, `5` selftest fail, `51` oauth manual-required-but-headless,
@@ -47,7 +47,8 @@ Exit code conventions: `0` PASS, `1` absent/probe-fail/oauth-fail, `2` fatal,
 | `BROWSER_HARNESS_EXECUTABLE` | (auto) | path to browser binary; bypasses bundled |
 | `BROWSER_HARNESS_STATE` | `~/.browser-harness/state` | per-slot storage state dir |
 | `BROWSER_HARNESS_HOME` | (unset) | override resolver root for hexa wrappers |
-| `BROWSER_HARNESS_NO_BOOTSTRAP` | `0` | `1` disables auto `npm install` (CI hermetic mode; fail loud if deps missing) |
+| `BROWSER_HARNESS_NO_BOOTSTRAP` | `0` | `1` disables auto `npm ci` (CI hermetic mode; fail loud if deps missing) |
+| `BROWSER_HARNESS_FLEET_HOSTS` | `ubu2` | comma-separated host list for `--target fleet` |
 | `BROWSER_HARNESS_OAUTH_START_URL` | (required for `oauth-login`) | the OAuth authorize URL to navigate to |
 | `BROWSER_HARNESS_OAUTH_SUCCESS_PATTERN` | `^https?://platform\.claude\.com/oauth/code/callback` | regex matched against `page.url()` to declare success |
 | `BROWSER_HARNESS_OAUTH_TIMEOUT_MS` | `300000` | ceiling on the user-click phase (oauth-login) |
@@ -125,7 +126,7 @@ Wrapper sentinel: `__BROWSER_HARNESS_PROBE__ status=<present|absent> path=<resol
 
 ## Selftest contract
 
-`browser-harness selftest` runs without launching a browser. F1-F6:
+`browser-harness selftest` runs without launching a browser AND without making any SSH call. F1-F8:
 
 | ID | Asserts |
 |---|---|
@@ -135,6 +136,8 @@ Wrapper sentinel: `__BROWSER_HARNESS_PROBE__ status=<present|absent> path=<resol
 | F4 | `parseArgs` flag-with-value vs flag-only roundtrip |
 | F5 | `probe` subprocess returns `ready\n` exit 0 OR `absent: …\n` exit 1 |
 | F6 | `lib/oauth.cjs` exports `runOauthLogin`, `isStateValid`, `safeUrlPrefix`; `runOauthLogin({})` returns 4 (slot required); chmod 0600 capable on POSIX |
+| F7 | `lib/remote.cjs` exports `runRemote`, `runOauthLoginRemote`, `runFleet`, `preflight`, `buildPayload`, `fleetHosts`; `buildPayload(...)` returns a self-contained Node script (`'use strict';` header + inlined `factory.cjs` + `oauth.cjs`) |
+| F8 | `--target` arg parsed correctly: default → `mac`; `ubu1`/`ubu2`/`fleet` → `isRemoteTarget()===true`; bare `--target` (no value) falls back to `mac` |
 
 Exit 0 on `fails=0`, exit 5 otherwise. Final line is the sentinel.
 
@@ -152,6 +155,7 @@ echo "$out" | grep -q "__BROWSER_HARNESS_SELFTEST__ PASS fails=0" || { echo "$ou
 - `v0.1.2` — dep-drift detection (lockfile mtime); shipped `wrappers/browser_harness.hexa`
 - `v0.2.0` — real `oauth-login` (`lib/oauth.cjs`); slot-isolated storageState persistence (mode 0600); exit codes 0/1/4/51/52 (50 removed); `BROWSER_HARNESS_OAUTH_*` env surface; F6 added to selftest. See `docs/oauth-login.md`.
 - `v0.2.1` — bootstrap switched from `npm install` to `npm ci` (with fallback to `npm install` only when `package-lock.json` absent). Eliminates the `hx update browser-harness` friction where the post-install lockfile regeneration left `package-lock.json` locally-modified, which then made `git pull --ff-only` refuse to apply the update. `npm ci` reads but never writes the lockfile, so the working tree stays clean across invocations.
+- `v0.3.0` — `lib/remote.cjs` Mac→ubu1/ubu2/fleet SSH-pipe transport; `--target {mac|ubu1|ubu2|fleet}` flag added to `probe`, `selftest`, `version`, `oauth-login`. Self-contained Node payload (factory.cjs + oauth.cjs inlined as base64) piped to `ssh <host> 'node -'`; preflight asserts node + playwright on the remote (npx cache discovered automatically; falls back to one-shot tmpdir install). `oauth-login --target ubu*` SCPs slot-N.json over before launch and pulls the updated state back on success/idempotent (mode 0600); failure leaves Mac state untouched. `--target fleet` fans out across `BROWSER_HARNESS_FLEET_HOSTS` (default `ubu2`); `oauth-login --target fleet` is refused. F7 (remote module) + F8 (target parsing) added to selftest. Bash exit-50 stub message superseded.
 
 ## Layout
 
@@ -164,13 +168,14 @@ browser-harness/
 │   ├── browser-harness            CLI entry (bash → node); self-bootstraps deps
 │   └── harness                    symlink → browser-harness (legacy)
 ├── lib/
-│   ├── harness.cjs                subcommand dispatcher
+│   ├── harness.cjs                subcommand dispatcher (--target wiring)
 │   ├── factory.cjs                fresh-context factory (M1-M6)
-│   └── oauth.cjs                  real oauth-login flow (v0.2.0)
+│   ├── oauth.cjs                  real oauth-login flow (v0.2.0)
+│   └── remote.cjs                 Mac→ubu1/ubu2/fleet SSH-pipe transport (v0.3.0)
 ├── docs/
 │   └── oauth-login.md             oauth-login design + exit codes + env + security
 ├── tests/
-│   └── selftest.cjs               F1-F6
+│   └── selftest.cjs               F1-F8
 └── wrappers/
     └── browser_harness.hexa       optional hexa-side wrapper
 ```

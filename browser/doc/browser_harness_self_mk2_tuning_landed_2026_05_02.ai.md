@@ -314,7 +314,7 @@ state/markers/browser_harness_self_mk2_tuning_landed.marker
 
 | path | type | size_b | LOC | sha256_hex |
 |---|---|---:|---:|---|
-| docs/browser_harness_self_mk2_tuning_landed_2026_05_02.ai.md | doc | TBD | TBD | (set after write) |
+| browser/doc/browser_harness_self_mk2_tuning_landed_2026_05_02.ai.md | doc | TBD | TBD | (set after write) |
 | state/markers/browser_harness_self_mk2_tuning_landed.marker | marker | TBD | TBD | (set after write) |
 
 (file index sha pin 은 marker 안에 emit — 본 §11 은 spec only, write 후 marker 가 sha 확정)

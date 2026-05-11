@@ -5,7 +5,7 @@ Designed for AI-native invocation: machine-parseable contract sentinels, determi
 resolver priority, no hidden global state.
 
 ```sh
-hx install need-singularity/browser-harness
+hx install dancinlab/browser-harness
 browser-harness probe        # → ready
 ```
 
@@ -13,11 +13,11 @@ browser-harness probe        # → ready
 
 | Method | Command | Notes |
 |---|---|---|
-| hx (canonical) | `hx install need-singularity/browser-harness` | clones + runs `install.sh` + symlinks `~/.hx/bin/browser-harness` |
+| hx (canonical) | `hx install dancinlab/browser-harness` | clones + runs `install.sh` + symlinks `~/.hx/bin/browser-harness` |
 | hx update | `hx update browser-harness` | git pull; deps auto-resync on next invocation (see "Update tracking") |
-| direct git | `git clone https://github.com/need-singularity/browser-harness && cd browser-harness && ./install.sh` | manual path |
+| direct git | `git clone https://github.com/dancinlab/browser-harness && cd browser-harness && ./install.sh` | manual path |
 
-`hx install need-singularity/browser-harness@<sha>` is **not** supported by current
+`hx install dancinlab/browser-harness@<sha>` is **not** supported by current
 `hx` (regex `^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$` rejects `@`). Pin to a tag/sha by
 manually checking out inside `~/.hx/packages/browser-harness/` if needed.
 

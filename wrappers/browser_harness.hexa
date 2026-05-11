@@ -127,7 +127,7 @@ if user_args[0] == "--invoke" {
     let bin = _resolve_harness_bin()
     if len(bin) == 0 {
         eprintln("ERROR: browser-harness CLI not installed. Install via:")
-        eprintln("  hx install need-singularity/browser-harness")
+        eprintln("  hx install dancinlab/browser-harness")
         eprintln("  OR set BROWSER_HARNESS_HOME=<path>")
         return 1
     }

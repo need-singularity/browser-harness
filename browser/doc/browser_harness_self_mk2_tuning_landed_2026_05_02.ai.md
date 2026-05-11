@@ -51,7 +51,7 @@ policy:
 
 ## TL;DR
 
-browser-harness 는 need-singularity 산하 단일-목적 Playwright 오케스트레이션 패키지 (1482 LoC across
+browser-harness 는 dancinlab 산하 단일-목적 Playwright 오케스트레이션 패키지 (1482 LoC across
 8 files, .cjs + .hexa wrapper hybrid). mk2 ecosystem (anima 26 / nexus 6+4 / hive 등) 와 달리
 `.roadmap.<domain>` 파일이 **0건** 존재. 본 audit:
 

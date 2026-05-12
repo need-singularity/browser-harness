@@ -4,36 +4,27 @@ Playwright-based browser automation harness. Fresh-context factory + probe + sel
 Designed for AI-native invocation: machine-parseable contract sentinels, deterministic
 resolver priority, no hidden global state.
 
-```sh
-hx install dancinlab/browser-harness
-browser-harness probe        # → ready
-```
-
 ## Install
 
-| Method | Command | Notes |
-|---|---|---|
-| hx (canonical) | `hx install dancinlab/browser-harness` | clones + runs `install.sh` + symlinks `~/.hx/bin/browser-harness` |
-| hx update | `hx update browser-harness` | git pull; deps auto-resync on next invocation (see "Update tracking") |
-| direct git | `git clone https://github.com/dancinlab/browser-harness && cd browser-harness && ./install.sh` | manual path |
+```bash
+# 1. Install hexa-lang (ships `hexa` + `hx` package manager)
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/dancinlab/hexa-lang/main/install.sh)"
 
-`hx install dancinlab/browser-harness@<sha>` is **not** supported by current
-`hx` (regex `^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$` rejects `@`). Pin to a tag/sha by
-manually checking out inside `~/.hx/packages/browser-harness/` if needed.
-
-## CLI surface
-
-```
-browser-harness <subcommand> [options]
+# 2. Install browser-harness
+hx install browser-harness          # global, pulls latest from registry
 ```
 
-| Subcommand | `--target=mac` (default) | `--target=ubu1\|ubu2` | `--target=fleet` | Exit | Sentinel (stdout) |
-|---|---|---|---|---|---|
-| `probe` | check installability + factory loadable | ssh + remote node check | fan out across fleet hosts | 0 ready / 1 absent | `ready` (mac) or `ready (remote=<host> node=<v> playwright=<v>)` (remote) or `absent: <why>` |
-| `selftest` | F1-F9 structural fixtures (no live browser, no SSH) | ssh + remote payload selftest (F1/F2/F3/F6 + F5-remote/F7-remote/F8-remote) | fan out | 0 PASS / 5 FAIL | `__BROWSER_HARNESS_SELFTEST__ PASS\|FAIL fails=<N>` |
-| `oauth-login --slot N [--headless]` | OAuth flow → slot-isolated storageState (see `docs/oauth-login.md`) | scp state + remote launch + scp back (mode 0600) | NA — refused (slot state can only live on one host) | 0 / 1 / 4 / 51 / 52 | `oauth-login: …` (per-result) |
-| `version` | print version | ssh + remote print | NA — prints Mac version | 0 | `<X.Y.Z>` |
-| `help` | usage | — | — | 0 | — |
+## Run
+
+```bash
+browser-harness probe                                    # check install + factory loadable
+browser-harness selftest                                 # run F1-F9 structural fixtures
+browser-harness oauth-login --slot N [--headless]        # oauth flow (see docs/oauth-login.md)
+browser-harness version                                  # print version (fleet → Mac version only)
+browser-harness help                                     # usage
+```
+
+All subcommands above accept `[--target {mac|ubu1|ubu2|fleet}]` (oauth-login: mac|ubu1|ubu2 only).
 
 Exit code conventions: `0` PASS, `1` absent/probe-fail/oauth-fail, `2` fatal,
 `4` usage, `5` selftest fail, `51` oauth manual-required-but-headless,

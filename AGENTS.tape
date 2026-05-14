@@ -48,6 +48,24 @@
   brief = "browser-automation harness"
   parent = "dancinlab"
 
+@L l1 := "repo-layout" :: structure [active]
+  .ai-native-readme-baseline -> "file"
+  AGENTS.tape -> "this file · governance + identity (.tape v1.2)"
+  CLAUDE.md -> "symlink → AGENTS.tape"
+  hexa.toml -> "TOML config"
+  install.sh -> "shell script"
+  package-lock.json -> "JSON"
+  package.json -> "Node manifest"
+  README.md -> "human intro · 18-block format (atlas/README-FORMAT.md)"
+  TAPE-AUDIT.md -> ".tape v1.x adoption audit ledger"
+  bin/ -> "binary scripts / CLIs (2 items)"
+  browser/ -> "subdir (1 items)"
+  docs/ -> "documentation (1 items)"
+  lib/ -> "library code (4 items)"
+  state/ -> "runtime state (gitignored typically) (1 items)"
+  tests/ -> "test suite (2 items)"
+  wrappers/ -> "subdir (1 items)"
+
 @D g_inherit := "inherits-lattice-policy" :: governance [required]
   rule = "All echoes/LATTICE_POLICY.md rules apply — real-limits-first · lattice-is-tool · verification-anchor-real-limit · no-artificial-ceilings · honesty-obligation-external."
   authority = "[@x_lattice_policy]"

@@ -1,8 +1,35 @@
-# browser-harness
+<p align="center">
+  <img src="docs/logo.svg" width="140" alt="browser-harness">
+</p>
+
+<h1 align="center">🌐 browser-harness</h1>
+
+<p align="center"><strong>Browser-Automation Harness</strong> — Playwright-based · fresh-context factory · OAuth slot persistence · SSH-pipe remote fanout</p>
+
+<p align="center">
+  <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-MIT-blue"></a>
+  <a href=".github/workflows/lint.yml"><img alt="CI" src="https://github.com/dancinlab/browser-harness/actions/workflows/lint.yml/badge.svg"></a>
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.3.1-success">
+  <img alt="Selftest" src="https://img.shields.io/badge/selftest-F1%E2%80%93F9-informational">
+  <img alt="Engines" src="https://img.shields.io/badge/engines-chromium%20·%20firefox%20·%20webkit-informational">
+  <img alt="Parent" src="https://img.shields.io/badge/parent-dancinlab-blueviolet">
+</p>
+
+<p align="center">Playwright · fresh-context · OAuth-slot · SSH-pipe · fleet-fanout · AI-native sentinels</p>
+
+---
 
 Playwright-based browser automation harness. Fresh-context factory + probe + selftest.
 Designed for AI-native invocation: machine-parseable contract sentinels, deterministic
 resolver priority, no hidden global state.
+
+## Status
+
+- v0.3.1 — symmetric remote selftest + exit-52 SCP-skip via content hash (see Versioning)
+- F1-F9 structural selftest fixtures · F5-remote/F7-remote/F8-remote on `--target ubu*`
+- 3 Playwright engines (chromium / firefox / webkit), default `firefox`
+- Remote targets: `mac` (default) · `ubu1` · `ubu2` · `fleet` (SSH-piped Node payload)
+- Exit codes: `0` PASS · `1` absent/probe-fail · `2` fatal · `4` usage · `5` selftest fail · `51` oauth manual-required-but-headless · `52` oauth idempotent
 
 ## Install
 
@@ -152,7 +179,7 @@ echo "$out" | grep -q "__BROWSER_HARNESS_SELFTEST__ PASS fails=0" || { echo "$ou
 - `v0.3.0` — `lib/remote.cjs` Mac→ubu1/ubu2/fleet SSH-pipe transport; `--target {mac|ubu1|ubu2|fleet}` flag added to `probe`, `selftest`, `version`, `oauth-login`. Self-contained Node payload (factory.cjs + oauth.cjs inlined as base64) piped to `ssh <host> 'node -'`; preflight asserts node + playwright on the remote (npx cache discovered automatically; falls back to one-shot tmpdir install). `oauth-login --target ubu*` SCPs slot-N.json over before launch and pulls the updated state back on success/idempotent (mode 0600); failure leaves Mac state untouched. `--target fleet` fans out across `BROWSER_HARNESS_FLEET_HOSTS` (default `ubu2`); `oauth-login --target fleet` is refused. F7 (remote module) + F8 (target parsing) added to selftest. Bash exit-50 stub message superseded.
 - `v0.3.1` — symmetric remote selftest + exit-52 SCP-skip via content hash. (1) `tests/selftest_remote.cjs` ships and is inlined into the SSH payload by `lib/remote.cjs::buildPayload()` when `subcmd === 'selftest'`. Remote coverage now matches the local F1-F8 surface as F1/F2/F3/F6 (bundled today) + **F5-remote** (in-process `runOauthLogin({}) → 4` — no subprocess needed since `bin/browser-harness` isn't shipped) + **F7-remote** (factory + oauth co-loadable in the same process — the canonical use case) + **F8-remote** (SLOT_STATE dir creates with mode 0700 if absent). F4 stays CLI-side (parseArgs is a Mac concern); F7/F8 don't apply to the remote payload itself (the remote never inspects `--target`). Same `__BROWSER_HARNESS_SELFTEST__ PASS fails=N (remote)` sentinel; output lines prefixed with `(remote)`. F9 added to local selftest as a structural guard (fixture exists + `runRemoteSelftest` exported + payload references it for the selftest subcmd only). (2) `runOauthLoginRemote` now skips the SCP-back when the remote returned exit 52 AND the local + remote slot files are byte-identical (sha256 compared via `ssh <host> shasum -a 256 <path>`). Logs `remote.cjs: slot-<N> state byte-identical, skipped SCP-back`. When local has no prior state but remote returned 52, still SCPs back (preserve a pre-seeded remote). Exit 0 always SCPs back.
 
-## Layout
+## Repo layout
 
 ```
 browser-harness/
